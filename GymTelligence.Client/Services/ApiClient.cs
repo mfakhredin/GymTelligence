@@ -47,7 +47,7 @@ public sealed class ApiClient(HttpClient http, SessionState session)
         await SendAsync(() => http.DeleteAsync(url));
     }
 
-    private static async Task<T> SendAsync<T>(Func<Task<HttpResponseMessage>> send)
+    private async Task<T> SendAsync<T>(Func<Task<HttpResponseMessage>> send)
     {
         try
         {
@@ -59,7 +59,7 @@ public sealed class ApiClient(HttpClient http, SessionState session)
         catch (HttpRequestException) { throw new ApiException("The server is unavailable right now. Check your connection and try again."); }
     }
 
-    private static async Task SendAsync(Func<Task<HttpResponseMessage>> send)
+    private async Task SendAsync(Func<Task<HttpResponseMessage>> send)
     {
         try
         {
@@ -71,16 +71,21 @@ public sealed class ApiClient(HttpClient http, SessionState session)
         catch (HttpRequestException) { throw new ApiException("The server is unavailable right now. Check your connection and try again."); }
     }
 
-    private static async Task<T> ReadAsync<T>(HttpResponseMessage response)
+    private async Task<T> ReadAsync<T>(HttpResponseMessage response)
     {
         await EnsureSuccessAsync(response);
         return await response.Content.ReadFromJsonAsync<T>(JsonOptions.Default)
             ?? throw new ApiException("The server returned an empty response.");
     }
 
-    private static async Task EnsureSuccessAsync(HttpResponseMessage response)
+    private async Task EnsureSuccessAsync(HttpResponseMessage response)
     {
         if (response.IsSuccessStatusCode) return;
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            await session.SignOutAsync();
+            throw new ApiException("Your session expired. Please log in again.");
+        }
         var message = response.StatusCode == HttpStatusCode.TooManyRequests ? "Too many requests. Take a breath and try again shortly." : null;
         try
         {

@@ -28,6 +28,11 @@ public sealed class SessionState(IJSRuntime js, HttpClient http) : Authenticatio
         {
             var json = await js.InvokeAsync<string?>("gymSession.get");
             if (!string.IsNullOrWhiteSpace(json)) Current = JsonSerializer.Deserialize<SessionData>(json, JsonOptions.Default);
+            if (Current is not null && IsExpired(Current.Token))
+            {
+                Current = null;
+                await js.InvokeVoidAsync("gymSession.clear");
+            }
         }
         catch { Current = null; }
         ApplyToken();
@@ -59,6 +64,25 @@ public sealed class SessionState(IJSRuntime js, HttpClient http) : Authenticatio
     }
 
     private void ApplyToken() => http.DefaultRequestHeaders.Authorization = Current is null ? null : new AuthenticationHeaderValue("Bearer", Current.Token);
+    private static bool IsExpired(string token)
+    {
+        try
+        {
+            var segments = token.Split('.');
+            if (segments.Length != 3) return true;
+            var payload = segments[1].Replace('-', '+').Replace('_', '/');
+            payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
+            using var json = JsonDocument.Parse(Convert.FromBase64String(payload));
+            return !json.RootElement.TryGetProperty("exp", out var expiration)
+                || !expiration.TryGetInt64(out var unixSeconds)
+                || DateTimeOffset.FromUnixTimeSeconds(unixSeconds) <= DateTimeOffset.UtcNow.AddSeconds(30);
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
     private static ClaimsPrincipal ToPrincipal(SessionData? value) => value is null ? Anonymous : new ClaimsPrincipal(new ClaimsIdentity(
         [new Claim(ClaimTypes.NameIdentifier, value.User.Id.ToString()), new Claim(ClaimTypes.Name, value.User.Name), new Claim(ClaimTypes.Email, value.User.Email), new Claim(ClaimTypes.Role, value.User.Role)], "jwt"));
 }
