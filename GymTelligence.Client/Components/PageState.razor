@@ -1,0 +1,23 @@
+<section class="page-state @(string.IsNullOrWhiteSpace(Error) ? "loading" : "failed")" role="@(string.IsNullOrWhiteSpace(Error) ? "status" : "alert")" aria-live="polite">
+    @if (string.IsNullOrWhiteSpace(Error))
+    {
+        <span class="state-spinner" aria-hidden="true"></span>
+        <p>@LoadingText</p>
+    }
+    else
+    {
+        <span class="state-icon" aria-hidden="true"><AppIcon Name="alert" /></span>
+        <div><h2>@ErrorTitle</h2><p>@Error</p></div>
+        @if (OnRetry.HasDelegate)
+        {
+            <button type="button" class="button ghost" @onclick="OnRetry"><AppIcon Name="refresh" /> Try again</button>
+        }
+    }
+</section>
+
+@code {
+    [Parameter] public string LoadingText { get; set; } = "Loading your workspace…";
+    [Parameter] public string ErrorTitle { get; set; } = "We couldn't load this page.";
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public EventCallback OnRetry { get; set; }
+}

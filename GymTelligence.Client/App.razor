@@ -1,0 +1,16 @@
+<CascadingAuthenticationState>
+    <Router AppAssembly="@typeof(App).Assembly">
+        <Found Context="routeData">
+            <AuthorizeRouteView RouteData="routeData" DefaultLayout="@typeof(MainLayout)">
+                <NotAuthorized><RedirectToLogin /></NotAuthorized>
+                <Authorizing><div class="boot-screen"><div class="pulse-mark"><AppIcon Name="logo" /></div><p>Calibrating your workspace…</p></div></Authorizing>
+            </AuthorizeRouteView>
+            <FocusOnNavigate RouteData="routeData" Selector="h1" />
+        </Found>
+        <NotFound>
+            <LayoutView Layout="@typeof(MainLayout)">
+                <section class="empty-state"><span>404</span><h1>Wrong turn.</h1><p>This route is taking a rest day.</p><a class="button primary" href="/">Back to base</a></section>
+            </LayoutView>
+        </NotFound>
+    </Router>
+</CascadingAuthenticationState>

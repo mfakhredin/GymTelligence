@@ -1,0 +1,246 @@
+@page "/plans/{Id:int}"
+@attribute [Authorize]
+@inject ApiClient Api
+
+<PageTitle>@(detail?.Plan.Title ?? "Training block") — GymTelligence</PageTitle>
+
+@if (loading)
+{
+    <PageState LoadingText="Preparing your training block…" />
+}
+else if (detail is null)
+{
+    <PageState Error="@loadError" ErrorTitle="This training block isn't available." OnRetry="Load" />
+}
+else
+{
+    <header class="plan-hero">
+        <a class="plan-back" href="/plans"><AppIcon Name="back" /> All workout plans</a>
+        <div class="plan-hero-grid">
+            <div>
+                <p class="eyebrow"><i></i> @detail.Plan.Source plan · Version @detail.Plan.Version</p>
+                <h1>@detail.Plan.Title<span>.</span></h1>
+                <p>@detail.Plan.Description</p>
+            </div>
+            <div class="plan-spec" aria-label="Plan summary">
+                <span><small>WEEKLY FREQUENCY</small><strong>@detail.Plan.DaysPerWeek</strong><em>days</em></span>
+                <span><small>TRAINING LEVEL</small><strong class="spec-word">@detail.Plan.Difficulty</strong></span>
+                <span><small>PRIMARY GOAL</small><strong class="spec-word">@Pretty(detail.Plan.Goal)</strong></span>
+            </div>
+        </div>
+    </header>
+
+    <AlertMessage Message="@message" Kind="@messageKind" />
+
+    @if (!string.IsNullOrWhiteSpace(detail.GenerationNotes))
+    {
+        <details class="logic-panel">
+            <summary><span><AppIcon Name="sparkles" /> ADAPTIVE NOTES</span><strong>Why this plan was created for you</strong><i aria-hidden="true">+</i></summary>
+            <p>@detail.GenerationNotes</p>
+        </details>
+    }
+
+    <section class="training-control" aria-label="Workout progress">
+        <div class="block-progress">
+            <div class="block-progress-ring" style="--progress:@OverallPercent"><strong>@OverallPercent%</strong><small>complete</small></div>
+            <div><span>TRAINING BLOCK</span><h2>@CompletedSets of @TotalSets sets complete</h2><p>Choose a session, then tap each set as you finish it.</p></div>
+        </div>
+        <nav class="session-switcher" aria-label="Choose a workout session">
+            @foreach (var session in detail.Workouts)
+            {
+                var total = SetCount(session);
+                var complete = CompletedSetCount(session);
+                <button type="button" class="session-pill @(session.Id == SelectedWorkout?.Id ? "active" : "") @(total > 0 && complete == total ? "complete" : "")" @onclick="() => SelectWorkout(session.Id)" aria-pressed="@(session.Id == SelectedWorkout?.Id)">
+                    <span>D@session.DayNumber.ToString("D2")</span>
+                    <strong>@session.Title</strong>
+                    <small>@complete / @total sets</small>
+                    <i style="--session-progress:@Percent(complete, total)" aria-hidden="true"></i>
+                </button>
+            }
+        </nav>
+    </section>
+
+    @if (SelectedWorkout is { } workout)
+    {
+        var total = SetCount(workout);
+        var complete = CompletedSetCount(workout);
+        var feedback = FeedbackFor(workout.Id);
+        <article class="workout-module active-workout">
+            <header>
+                <div class="day-code">D@workout.DayNumber.ToString("D2")</div>
+                <div><small>ACTIVE SESSION · @workout.Exercises.Count MOVEMENTS</small><h2>@workout.Title</h2><p>@workout.Description</p></div>
+                <div class="session-progress"><strong>@Percent(complete, total)%</strong><span>@complete of @total sets</span></div>
+            </header>
+
+            <div class="exercise-list">
+                @foreach (var (item, exerciseIndex) in workout.Exercises.Select((value, index) => (value, index)))
+                {
+                    <section class="exercise-row">
+                        <div class="exercise-name">
+                            <span>@(exerciseIndex + 1).ToString("D2")</span>
+                            <div><strong>@item.Name</strong><small>@item.MuscleGroup · @item.Equipment</small>@if (!string.IsNullOrWhiteSpace(item.Notes)) { <p>@item.Notes</p> }</div>
+                        </div>
+                        <div class="sets-row" aria-label="Sets for @item.Name">
+                            @foreach (var set in item.Sets)
+                            {
+                                var pending = pendingSets.Contains(set.Id);
+                                <button type="button" class="set-chip @(set.IsCompleted ? "complete" : "") @(pending ? "pending" : "")" disabled="@pending" @onclick="() => Toggle(workout.Id, item.Id, set)" aria-pressed="@set.IsCompleted" aria-label="Set @set.SetNumber, @set.Reps repetitions, @set.RestTime rest. @(set.IsCompleted ? "Completed" : "Not completed")">
+                                    <span>@set.SetNumber.ToString("D2")</span>
+                                    <div><strong>@set.Reps reps</strong><small>@set.RestTime rest</small></div>
+                                    <i aria-hidden="true"><AppIcon Name="check" /></i>
+                                </button>
+                            }
+                        </div>
+                    </section>
+                }
+            </div>
+
+            <footer class="session-footer">
+                <div class="feedback-intro"><AppIcon Name="activity" /><span><strong>Finish this session</strong><small>Feedback helps the next generated plan adapt.</small></span></div>
+                <div class="feedback-fields">
+                    <label>EFFORT<select @bind="feedback.Difficulty" aria-label="Session effort"><option>Easy</option><option>Normal</option><option>Hard</option></select></label>
+                    <label>DURATION<div class="duration-field"><input type="number" min="1" max="600" @bind="feedback.Duration" aria-label="Session duration in minutes" /><span>min</span></div></label>
+                    <button type="button" class="button primary" disabled="@busyWorkouts.Contains(workout.Id)" @onclick="() => Complete(workout.Id)">
+                        <AppIcon Name="check" /> @(busyWorkouts.Contains(workout.Id) ? "Saving…" : loggedWorkouts.Contains(workout.Id) ? "Session saved" : "Log session")
+                    </button>
+                </div>
+            </footer>
+        </article>
+
+        <div class="session-pagination">
+            <button type="button" class="button ghost" disabled="@(PreviousWorkout is null)" @onclick="() => SelectWorkout(PreviousWorkout?.Id)"><AppIcon Name="back" /> Previous session</button>
+            <span>Session @(SelectedIndex + 1) of @detail.Workouts.Count</span>
+            <button type="button" class="button ghost" disabled="@(NextWorkout is null)" @onclick="() => SelectWorkout(NextWorkout?.Id)">Next session <AppIcon Name="arrow" /></button>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private PlanDetailModel? detail;
+    private int? selectedWorkoutId;
+    private bool loading = true;
+    private string? loadError;
+    private string? message;
+    private string messageKind = "success";
+    private readonly HashSet<int> pendingSets = [];
+    private readonly HashSet<int> busyWorkouts = [];
+    private readonly HashSet<int> loggedWorkouts = [];
+    private readonly Dictionary<int, FeedbackState> feedbackByWorkout = [];
+
+    private WorkoutDetailModel? SelectedWorkout => detail?.Workouts.FirstOrDefault(x => x.Id == selectedWorkoutId) ?? detail?.Workouts.FirstOrDefault();
+    private int SelectedIndex => detail is null || SelectedWorkout is null ? 0 : detail.Workouts.ToList().FindIndex(x => x.Id == SelectedWorkout.Id);
+    private WorkoutDetailModel? PreviousWorkout => detail is null || SelectedIndex <= 0 ? null : detail.Workouts[SelectedIndex - 1];
+    private WorkoutDetailModel? NextWorkout => detail is null || SelectedIndex >= detail.Workouts.Count - 1 ? null : detail.Workouts[SelectedIndex + 1];
+    private int TotalSets => detail?.Workouts.Sum(SetCount) ?? 0;
+    private int CompletedSets => detail?.Workouts.Sum(CompletedSetCount) ?? 0;
+    private int OverallPercent => Percent(CompletedSets, TotalSets);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        selectedWorkoutId = null;
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        loading = true;
+        loadError = null;
+        try
+        {
+            detail = await Api.GetAsync<PlanDetailModel>($"api/workouts/plans/{Id}");
+            selectedWorkoutId ??= detail.Workouts.FirstOrDefault(x => CompletedSetCount(x) < SetCount(x))?.Id
+                ?? detail.Workouts.FirstOrDefault()?.Id;
+            foreach (var item in detail.Workouts)
+                feedbackByWorkout.TryAdd(item.Id, new FeedbackState());
+        }
+        catch (ApiException ex)
+        {
+            detail = null;
+            loadError = ex.Message;
+        }
+        finally { loading = false; }
+    }
+
+    private void SelectWorkout(int? workoutId)
+    {
+        if (workoutId.HasValue) selectedWorkoutId = workoutId.Value;
+    }
+
+    private async Task Toggle(int workoutId, int exerciseId, SetModel set)
+    {
+        if (detail is null || !pendingSets.Add(set.Id)) return;
+        message = null;
+        try
+        {
+            var state = await Api.PostAsync<ToggleSetModel>($"api/workouts/sets/{set.Id}/toggle");
+            var workouts = detail.Workouts.Select(workout => workout.Id != workoutId
+                ? workout
+                : workout with
+                {
+                    Exercises = workout.Exercises.Select(exercise => exercise.Id != exerciseId
+                        ? exercise
+                        : exercise with
+                        {
+                            Sets = exercise.Sets.Select(value => value.Id == set.Id
+                                ? value with { IsCompleted = state.IsCompleted }
+                                : value).ToList()
+                        }).ToList()
+                }).ToList();
+            detail = detail with { Workouts = workouts };
+        }
+        catch (ApiException ex)
+        {
+            message = ex.Message;
+            messageKind = "error";
+        }
+        finally { pendingSets.Remove(set.Id); }
+    }
+
+    private async Task Complete(int workoutId)
+    {
+        if (!busyWorkouts.Add(workoutId)) return;
+        message = null;
+        var feedback = FeedbackFor(workoutId);
+        try
+        {
+            await Api.PostAsync($"api/workouts/{workoutId}/complete", new
+            {
+                durationMinutes = feedback.Duration,
+                difficulty = feedback.Difficulty,
+                note = "Completed from training workspace."
+            });
+            loggedWorkouts.Add(workoutId);
+            message = "Session saved. Your progress, points, and adaptive training signal are up to date.";
+            messageKind = "success";
+        }
+        catch (ApiException ex)
+        {
+            message = ex.Message;
+            messageKind = "error";
+        }
+        finally { busyWorkouts.Remove(workoutId); }
+    }
+
+    private FeedbackState FeedbackFor(int workoutId)
+    {
+        if (!feedbackByWorkout.TryGetValue(workoutId, out var state))
+        {
+            state = new FeedbackState();
+            feedbackByWorkout[workoutId] = state;
+        }
+        return state;
+    }
+
+    private static int SetCount(WorkoutDetailModel workout) => workout.Exercises.Sum(x => x.Sets.Count);
+    private static int CompletedSetCount(WorkoutDetailModel workout) => workout.Exercises.Sum(x => x.Sets.Count(set => set.IsCompleted));
+    private static int Percent(int complete, int total) => total == 0 ? 0 : Math.Clamp(complete * 100 / total, 0, 100);
+    private static string Pretty(string value) => System.Text.RegularExpressions.Regex.Replace(value, "([a-z])([A-Z])", "$1 $2");
+
+    private sealed class FeedbackState
+    {
+        public string Difficulty { get; set; } = "Normal";
+        public int Duration { get; set; } = 45;
+    }
+}

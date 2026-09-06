@@ -1,0 +1,30 @@
+@page "/reminders"
+@attribute [Authorize]
+@inject ApiClient Api
+
+<PageTitle>Rhythm — GymTelligence</PageTitle>
+<header class="page-head"><div><p class="eyebrow"><i></i> Workout schedule</p><h1>Reminders<span>.</span></h1><p>Set simple prompts for the days and times you want to train consistently.</p></div><button class="button primary" @onclick="New"><AppIcon Name="plus" /> NEW REMINDER</button></header>
+<AlertMessage Message="@message" Kind="@kind" />
+<section class="rhythm-layout">
+    <div class="rhythm-list">
+        @if(loading){<PageState LoadingText="Loading your reminders…" />}
+        else if(items is null){<PageState Error="@loadError" ErrorTitle="Your reminders couldn't be loaded." OnRetry="Load" />}
+        else if(items.Count==0){<div class="empty-panel"><span>00:00</span><h2>No reminders yet.</h2><p>Create a reminder for the time you most often plan to train.</p></div>}
+        else{@foreach(var item in items){<article class="rhythm-card @(item.IsActive?"active":"")"><div class="time-block"><strong>@item.ReminderTime.ToString("HH:mm")</strong><small>LOCAL TIME</small></div><div><span>@item.DaysOfWeek</span><h2>@item.Title</h2><p>@(item.IsActive?"Reminder active":"Reminder paused")</p></div><i></i><div class="card-actions"><button @onclick="()=>Edit(item)" title="Edit reminder"><AppIcon Name="edit" /> EDIT</button><button @onclick="()=>Delete(item.Id)" title="Delete reminder"><AppIcon Name="trash" /> DELETE</button></div></article>}}
+    </div>
+    <aside class="rhythm-editor">
+        <span>@(editingId.HasValue ? "EDIT REMINDER" : "CREATE REMINDER")</span><h2>@(editingId.HasValue ? "Update the schedule." : "Choose your training time.")</h2>
+        <EditForm Model="form" OnValidSubmit="Save" class="form-stack"><DataAnnotationsValidator/><label>Reminder title<InputText @bind-Value="form.Title" placeholder="Evening strength workout" /></label><label>Time<InputDate @bind-Value="form.ReminderTime" Type="InputDateType.Time" /></label><label>Training days / comma separated<InputText @bind-Value="form.DaysOfWeek" placeholder="Mon,Wed,Fri" /></label><label class="toggle-field"><InputCheckbox @bind-Value="form.IsActive" /><span><strong>Reminder active</strong><small>Show this reminder on your dashboard</small></span></label><button class="button primary full"><AppIcon Name="check" /> @(editingId.HasValue?"SAVE CHANGES":"CREATE REMINDER")</button></EditForm>
+        <div class="rhythm-note"><i>!</i><p>Dashboard reminders are local cues. Email and push delivery can be attached later without changing this screen.</p></div>
+    </aside>
+</section>
+
+@code {
+    private List<ReminderModel>? items; private ReminderForm form=new(); private int? editingId; private string? message; private string kind="success"; private bool loading=true; private string? loadError;
+    protected override async Task OnInitializedAsync()=>await Load();
+    private async Task Load(){loading=true;loadError=null;try{items=await Api.GetAsync<List<ReminderModel>>("api/reminders");}catch(ApiException ex){items=null;loadError=ex.Message;}finally{loading=false;}}
+    private void New(){editingId=null;form=new();}
+    private void Edit(ReminderModel item){editingId=item.Id;form=new ReminderForm{Title=item.Title,ReminderTime=item.ReminderTime,DaysOfWeek=item.DaysOfWeek,IsActive=item.IsActive};}
+    private async Task Save(){try{if(editingId.HasValue)await Api.PutAsync<ReminderModel>($"api/reminders/{editingId}",form);else await Api.PostAsync<ReminderModel>("api/reminders",form);message="Training signal saved.";kind="success";New();await Load();}catch(ApiException ex){message=ex.Message;kind="error";}}
+    private async Task Delete(int id){try{await Api.DeleteAsync($"api/reminders/{id}");message="Reminder removed.";kind="success";await Load();}catch(ApiException ex){message=ex.Message;kind="error";}}
+}

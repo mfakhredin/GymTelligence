@@ -1,0 +1,31 @@
+@page "/coach"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject IJSRuntime JS
+
+<PageTitle>AI Coach — GymTelligence</PageTitle>
+<section class="coach-page">
+    <header><div><p class="eyebrow"><i></i> AI training guidance / Online</p><h1>AI Coach<span>.</span></h1></div><div class="coach-model"><span>ASSISTANT</span><strong>Gemini · Safety guided</strong></div></header>
+    <AlertMessage Message="@error" />
+    <div class="coach-layout">
+        <aside><span>YOUR TRAINING CONTEXT</span><div class="context-orb"><strong><AppIcon Name="logo" /></strong><i></i></div><h2>Personalized guidance, with clear limits.</h2><p>The coach uses your goal and training level. Medical and unsafe requests are not answered.</p><div class="context-lines"><span><i></i>Profile connected</span><span><i></i>Safety checks active</span><span><i></i>Conversation history available</span></div><small>AI guidance does not replace a qualified coach or clinician.</small></aside>
+        <main class="chat-console">
+            <div class="chat-log" id="chatLog">
+                @if(loading){<PageState LoadingText="Loading your coaching history…" />}
+                else if(messages is null){<PageState Error="@loadError" ErrorTitle="Your coaching history couldn't be loaded." OnRetry="Load" />}
+                else if(messages.Count==0){<div class="coach-welcome"><span>✦</span><h2>What are we solving today?</h2><p>Ask about programming, technique, recovery, consistency, or the logic behind your block.</p><div>@foreach(var suggestion in suggestions){<button @onclick="()=>UseSuggestion(suggestion)">@suggestion ↗</button>}</div></div>}
+                else{@foreach(var item in messages){<div class="chat user"><small>YOU</small><p>@item.UserMessage</p></div><div class="chat coach"><small>GYMTELLIGENCE / AI</small><p>@item.AiResponse</p></div>}@if(busy){<div class="chat coach typing"><small>GYMTELLIGENCE / AI</small><p><i></i><i></i><i></i></p></div>}}
+            </div>
+            <form class="chat-input" @onsubmit="Ask" @onsubmit:preventDefault><textarea @bind="question" @bind:event="oninput" maxlength="1000" placeholder="Ask about training, recovery, technique, or your plan…"></textarea><div><span>@question.Length / 1000</span><button disabled="@(busy||question.Trim().Length<2)"><AppIcon Name="arrow" /> SEND MESSAGE</button></div></form>
+        </main>
+    </div>
+</section>
+
+@code {
+    private List<AiMessageModel>? messages; private string question=""; private bool busy; private bool loading=true; private string? loadError; private string? error;
+    private readonly string[] suggestions=["Adapt my next workout","How should I recover today?","Explain progressive overload"];
+    protected override async Task OnInitializedAsync()=>await Load();
+    private async Task Load(){loading=true;loadError=null;try{messages=await Api.GetAsync<List<AiMessageModel>>("api/coach/history");}catch(ApiException ex){messages=null;loadError=ex.Message;}finally{loading=false;}}
+    private void UseSuggestion(string value)=>question=value;
+    private async Task Ask(){var sent=question.Trim();question="";busy=true;error=null;messages??=[];try{var result=await Api.PostAsync<AskCoachResponse>("api/coach/ask",new{message=sent});messages.Add(new AiMessageModel(0,sent,result.Answer,DateTime.UtcNow));await InvokeAsync(StateHasChanged);await JS.InvokeVoidAsync("gymSession.scrollToBottom","chatLog");}catch(ApiException ex){error=ex.Message;question=sent;}finally{busy=false;}}
+}

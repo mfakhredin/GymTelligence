@@ -1,0 +1,47 @@
+@page "/login"
+@attribute [AllowAnonymous]
+@inject ApiClient Api
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>Log in — GymTelligence</PageTitle>
+<section class="auth-page">
+    <div class="auth-art">
+        <div class="auth-grid"></div><span class="vertical-word">DISCIPLINE / SIGNAL / PROGRESS</span>
+        <div class="auth-art-copy"><span>01</span><h1>Return to<br>your rhythm.</h1><p>Your latest block, completed sets, and progress signal are waiting.</p></div>
+        <div class="auth-orbit"><i></i><b><AppIcon Name="logo" /></b></div>
+    </div>
+    <div class="auth-form-wrap">
+        <div class="auth-heading"><p class="eyebrow"><i></i> Account login</p><h2>Welcome back.</h2><p>Log in to continue your workouts and review your progress.</p></div>
+        <AlertMessage Message="@error" />
+        <EditForm Model="form" OnValidSubmit="Submit" class="form-stack">
+            <DataAnnotationsValidator />
+            <label>Email address<InputText @bind-Value="form.Email" type="email" autocomplete="email" /><ValidationMessage For="@(() => form.Email)" /></label>
+            <label>Password<InputText @bind-Value="form.Password" type="password" autocomplete="current-password" /><ValidationMessage For="@(() => form.Password)" /></label>
+            <button class="button primary xl full" disabled="@busy"><AppIcon Name="user" /> @(busy ? "Signing you in…" : "LOG IN")</button>
+        </EditForm>
+        <p class="auth-switch"><a href="/forgot-password">Forgot your password?</a></p>
+        <div class="demo-access"><span>TRY THE DEMO</span><button @onclick="UseDemo">Use demo account</button></div>
+        <p class="auth-switch">New to the system? <a href="/register">Create an account</a></p>
+    </div>
+</section>
+
+@code {
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+    private readonly LoginForm form = new();
+    private string? error;
+    private bool busy;
+    private void UseDemo() { form.Email = "demo@gymtelligence.test"; form.Password = "password"; }
+    private async Task Submit()
+    {
+        busy = true; error = null;
+        try
+        {
+            var result = await Api.PostAsync<AuthResponse>("api/auth/login", form);
+            await Session.SignInAsync(result);
+            Navigation.NavigateTo(string.IsNullOrWhiteSpace(ReturnUrl) ? "/dashboard" : ReturnUrl);
+        }
+        catch (ApiException ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+}

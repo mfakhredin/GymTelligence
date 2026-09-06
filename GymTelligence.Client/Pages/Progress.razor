@@ -1,0 +1,37 @@
+@page "/progress"
+@attribute [Authorize]
+@inject ApiClient Api
+
+<PageTitle>Telemetry — GymTelligence</PageTitle>
+<header class="page-head"><div><p class="eyebrow"><i></i> Body and performance history</p><h1>Your progress<span>.</span></h1><p>Record your latest measurements and workouts, follow the trend, and help future plans adapt to you.</p></div><button class="button primary" @onclick="()=>showForm=!showForm"><AppIcon Name="@(showForm ? "close" : "plus")" /> @(showForm ? "CLOSE FORM" : "ADD PROGRESS")</button></header>
+<AlertMessage Message="@message" Kind="@kind" />
+@if (showForm)
+{
+    <EditForm Model="form" OnValidSubmit="Save" class="entry-panel"><DataAnnotationsValidator/><div><span>NEW PROGRESS ENTRY</span><h2>Record where you are today.</h2></div><label>Date<InputDate @bind-Value="form.EntryDate" /></label><label>Weight / kg<InputNumber @bind-Value="form.Weight" /></label><label>Body fat / %<InputNumber @bind-Value="form.BodyFatPercentage" /></label><label>Workouts completed<InputNumber @bind-Value="form.WorkoutsCompleted" /></label><label class="wide">Optional notes<InputTextArea @bind-Value="form.Notes" /></label><button class="button primary"><AppIcon Name="check" /> SAVE PROGRESS</button></EditForm>
+}
+@if (loading) { <PageState LoadingText="Reading your progress…" /> }
+else if (data is null) { <PageState Error="@loadError" ErrorTitle="Your progress couldn't be loaded." OnRetry="Load" /> }
+else
+{
+    <section class="metric-strip telemetry-metrics"><article><small>WORKOUTS THIS WEEK</small><strong>@data.WeeklyWorkouts</strong><span>completed sessions</span></article><article><small>WEIGHT CHANGE</small><strong>@Delta(data.WeightChange)<em> kg</em></strong><span>across recent entries</span></article><article><small>BODY FAT CHANGE</small><strong>@Delta(data.BodyFatChange)<em>%</em></strong><span>across recent entries</span></article><article><small>BADGES EARNED</small><strong>@data.Badges.Count</strong><span>achievement markers</span></article></section>
+    <section class="telemetry-grid">
+        <article class="telemetry-chart"><div class="card-top"><span>01 / WEIGHT SIGNAL</span><strong>@data.Chart.Count DATA POINTS</strong></div><div class="line-chart">
+            @for(var i=0;i<data.Chart.Count;i++){var point=data.Chart[i];<div class="data-point" style="left:@X(i)%;bottom:@Y(point.Weight)%"><i></i><span>@point.Weight?.ToString("0.0")</span><small>@point.Date.ToString("dd MMM")</small></div>}
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none"><polyline points="@Polyline" /></svg>
+        </div></article>
+        <article class="history-panel"><div class="card-top"><span>02 / RECENT OUTPUT</span><strong>@data.History.Count LOGS</strong></div>@foreach(var row in data.History){<div class="history-row"><time>@row.CompletedDate.ToString("dd")<small>@row.CompletedDate.ToString("MMM")</small></time><span><strong>@row.WorkoutTitle</strong><small>@row.Difficulty · @(row.DurationMinutes?.ToString() ?? "—") min</small></span><b>+@row.PointsAwarded</b></div>}@if(data.History.Count==0){<p class="muted">Completed sessions will appear here.</p>}</article>
+    </section>
+    <div class="section-label"><span>PROGRESS LOG</span><i></i><strong>NEWEST FIRST</strong></div>
+    <section class="log-grid">@foreach(var entry in data.Entries){<article><time>@entry.EntryDate.ToString("dd MMM yy")</time><div><strong>@(entry.Weight?.ToString("0.0") ?? "—")<small> kg</small></strong><strong>@(entry.BodyFatPercentage?.ToString("0.0") ?? "—")<small> % fat</small></strong><strong>@entry.WorkoutsCompleted<small> sessions</small></strong></div><p>@(entry.Notes??"No notes attached to this signal.")</p></article>}</section>
+}
+
+@code {
+    private ProgressModel? data; private ProgressForm form=new(); private bool showForm; private string? message; private string kind="success"; private bool loading=true; private string? loadError;
+    protected override async Task OnInitializedAsync()=>await Load();
+    private async Task Load(){loading=true;loadError=null;try{data=await Api.GetAsync<ProgressModel>("api/progress");}catch(ApiException ex){data=null;loadError=ex.Message;}finally{loading=false;}}
+    private async Task Save(){try{await Api.PostAsync<ProgressEntryModel>("api/progress",form);message="Progress signal saved. Points and badges recalculated.";kind="success";showForm=false;form=new();await Load();}catch(ApiException ex){message=ex.Message;kind="error";}}
+    private static string Delta(decimal? value)=>value is null?"—":$"{(value>0?"+":"")}{value:0.0}";
+    private int X(int index)=>data?.Chart.Count>1?(int)(index*92.0/(data.Chart.Count-1)+4):50;
+    private int Y(decimal? value){var vals=data?.Chart.Where(x=>x.Weight.HasValue).Select(x=>x.Weight!.Value).ToList()??[];if(value is null||vals.Count==0)return 10;var min=vals.Min()-1;var max=vals.Max()+1;return (int)(12+(value.Value-min)/Math.Max(1,max-min)*70);}
+    private string Polyline=>data is null?"":string.Join(" ",data.Chart.Select((p,i)=>$"{X(i)},{100-Y(p.Weight)}"));
+}

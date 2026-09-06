@@ -1,0 +1,244 @@
+@page "/staff"
+@attribute [Authorize(Roles = "Trainer,Admin")]
+@inject ApiClient Api
+@inject SessionState Session
+@inject IJSRuntime JS
+
+<PageTitle>Staff Lab — GymTelligence</PageTitle>
+<header class="page-head staff-head">
+    <div><p class="eyebrow"><i></i> Trainer and administrator tools</p><h1>Staff workspace<span>.</span></h1><p>Manage the exercise library. Administrators can also manage accounts, reusable workout templates, and protected backups.</p></div>
+    <div class="staff-head-actions">
+        @if (IsAdmin)
+        {
+            <button class="button ghost" @onclick="CreateBackup"><AppIcon Name="database" /> BACK UP DATA</button>
+            <button class="button ghost" @onclick="NewTemplate"><AppIcon Name="plus" /> PLAN TEMPLATE</button>
+        }
+        <button class="button primary" @onclick="NewExercise"><AppIcon Name="plus" /> CREATE EXERCISE</button>
+    </div>
+</header>
+<AlertMessage Message="@message" Kind="@kind" />
+
+@if (loading)
+{
+    <PageState LoadingText="Opening the staff workspace…" />
+}
+else if (overview is null)
+{
+    <PageState Error="@loadError" ErrorTitle="The staff workspace couldn't be loaded." OnRetry="Load" />
+}
+else
+{
+    <section class="metric-strip">
+        <article><small>ATHLETES</small><strong>@overview.Users</strong><span>active profiles</span></article>
+        <article><small>TRAINERS</small><strong>@overview.Trainers</strong><span>content operators</span></article>
+        <article><small>PLAN BLOCKS</small><strong>@overview.Plans</strong><span>available systems</span></article>
+        <article><small>MOVEMENTS</small><strong>@overview.Exercises</strong><span>library records</span></article>
+    </section>
+    <section class="staff-grid">
+        <article class="staff-library">
+            <div class="card-top"><span>01 / MOVEMENT OPERATIONS</span><strong>@exercises.Count RECORDS</strong></div>
+            @foreach (var item in exercises)
+            {
+                <div class="staff-row"><span>@Initials(item.MuscleGroup, 2)</span><div><strong>@item.Name</strong><small>@item.Equipment · @item.Difficulty · @(item.CreatedByUserId.HasValue ? "STAFF" : "CORE")</small></div>@if (CanEdit(item)) { <button @onclick="() => EditExercise(item)"><AppIcon Name="edit" /> EDIT</button> } else { <small class="locked-tag">LOCKED</small> }</div>
+            }
+        </article>
+        <article class="staff-activity">
+            <div class="card-top"><span>02 / RECENT ATHLETES</span><strong>LIVE</strong></div>
+            @foreach (var item in overview.RecentUsers)
+            {
+                <div class="user-row"><span>@Initials(item.Name, 1)</span><div><strong>@item.Name</strong><small>@item.Email</small></div><b>@item.Role</b></div>
+            }
+            <div class="staff-total"><span>COMPLETED OUTPUT</span><strong>@overview.CompletedWorkouts</strong></div>
+        </article>
+    </section>
+
+    @if (IsAdmin)
+    {
+        <section class="admin-template-grid">
+            <article class="staff-library">
+                <div class="card-top"><span>03 / PLAN TEMPLATE CONTROL</span><strong>@templates.Count TEMPLATES</strong></div>
+                @foreach (var item in templates)
+                {
+                    <div class="template-admin-row">
+                        <span>@item.DaysPerWeek<small>DAYS</small></span>
+                        <div><strong>@item.Title</strong><small>@Humanize(item.Goal) · @item.Difficulty · @item.Source</small><p>@item.Description</p></div>
+                        <div class="template-actions"><button @onclick="() => EditTemplate(item)">EDIT</button><button class="danger-link" @onclick="() => DeleteTemplate(item.Id)">DELETE</button></div>
+                    </div>
+                }
+            </article>
+        </section>
+        <section class="admin-table">
+            <div class="card-top"><span>04 / ACCESS CONTROL</span><strong>ADMIN ONLY</strong></div>
+            <div class="table-head access-grid"><span>USER</span><span>ROLE</span><span>SUBSCRIPTION</span><span>ACTIVE</span><span></span></div>
+            @foreach (var item in users)
+            {
+                var access = accessForms[item.Id];
+                <div class="table-row access-grid">
+                    <span><strong>@item.Name</strong><small>@item.Email</small></span>
+                    <InputSelect @bind-Value="access.Role" disabled="@(item.Id == Session.Current?.User.Id)"><option>User</option><option>Trainer</option><option>Admin</option></InputSelect>
+                    <InputSelect @bind-Value="access.SubscriptionStatus"><option>Free</option><option>Active</option><option>Trialing</option><option>PastDue</option><option>Canceled</option><option>Incomplete</option><option>Expired</option></InputSelect>
+                    <InputCheckbox @bind-Value="access.IsActive" disabled="@(item.Id == Session.Current?.User.Id)" />
+                    <button class="button ghost compact" disabled="@(item.Id == Session.Current?.User.Id)" @onclick="() => SaveAccess(item.Id)">SAVE</button>
+                </div>
+            }
+        </section>
+        <section class="backup-console">
+            <div class="card-top"><span>05 / PROTECTED BACKUPS</span><strong>SERVER STORAGE</strong></div>
+            @if (backups.Count == 0)
+            {
+                <p>No snapshots have been generated yet.</p>
+            }
+            else
+            {
+                @foreach (var backup in backups)
+                {
+                    <div class="backup-row"><span>JSON</span><div><strong>@backup.FileName</strong><small>@backup.CreatedAt.ToLocalTime().ToString("dd MMM yyyy · HH:mm") · @backup.CreatedBy</small></div></div>
+                }
+            }
+        </section>
+    }
+}
+
+@if (showExerciseEditor)
+{
+    <div class="modal-backdrop" @onclick="CloseExerciseEditor"><div class="modal-panel" @onclick:stopPropagation>
+        <header><div><span>@(editingExerciseId.HasValue ? "EDIT MOVEMENT" : "NEW MOVEMENT")</span><h2>Movement intelligence.</h2></div><button @onclick="CloseExerciseEditor">×</button></header>
+        <EditForm Model="exerciseForm" OnValidSubmit="SaveExercise" class="form-stack"><DataAnnotationsValidator />
+            <div class="field-pair"><label>Name<InputText @bind-Value="exerciseForm.Name" /></label><label>Target muscle<InputText @bind-Value="exerciseForm.TargetMuscle" /></label></div>
+            <div class="field-trio"><label>Muscle group<InputText @bind-Value="exerciseForm.MuscleGroup" /></label><label>Equipment<InputText @bind-Value="exerciseForm.Equipment" /></label><label>Difficulty<InputSelect @bind-Value="exerciseForm.Difficulty"><option>Beginner</option><option>Intermediate</option><option>Advanced</option></InputSelect></label></div>
+            <label>Short description<InputText @bind-Value="exerciseForm.ShortDescription" /></label>
+            <label>Execution<InputTextArea @bind-Value="exerciseForm.Instructions" /></label>
+            <label>Common mistakes<InputTextArea @bind-Value="exerciseForm.CommonMistakes" /></label>
+            <label>Safety tips<InputTextArea @bind-Value="exerciseForm.SafetyTips" /></label>
+            <div class="field-pair"><label>Sets / reps<InputText @bind-Value="exerciseForm.RecommendedSetsReps" /></label><label>Secondary muscles<InputText @bind-Value="exerciseForm.SecondaryMuscles" /></label></div>
+            <label>Science note<InputTextArea @bind-Value="exerciseForm.ScienceNote" /></label>
+            <label class="toggle-field"><InputCheckbox @bind-Value="exerciseForm.IsPublic" /><span><strong>Public movement</strong><small>Visible to every athlete</small></span></label>
+            <button class="button primary full"><AppIcon Name="check" /> SAVE EXERCISE</button>
+        </EditForm>
+    </div></div>
+}
+
+@if (showTemplateEditor)
+{
+    <div class="modal-backdrop" @onclick="CloseTemplateEditor"><div class="modal-panel template-modal" @onclick:stopPropagation>
+        <header><div><span>@(editingTemplateId.HasValue ? "EDIT TEMPLATE" : "NEW TEMPLATE")</span><h2>Program architecture.</h2></div><button @onclick="CloseTemplateEditor">×</button></header>
+        <EditForm Model="templateForm" OnValidSubmit="SaveTemplate" class="form-stack"><DataAnnotationsValidator />
+            <label>Plan title<InputText @bind-Value="templateForm.Title" /><ValidationMessage For="@(() => templateForm.Title)" /></label>
+            <div class="field-trio">
+                <label>Goal<InputSelect @bind-Value="templateForm.Goal"><option value="GeneralFitness">General fitness</option><option value="BuildMuscle">Build muscle</option><option value="LoseFat">Lose fat</option><option value="ImproveStrength">Improve strength</option></InputSelect></label>
+                <label>Difficulty<InputSelect @bind-Value="templateForm.Difficulty"><option>Beginner</option><option>Intermediate</option><option>Advanced</option></InputSelect></label>
+                <label>Days per week<InputNumber @bind-Value="templateForm.DaysPerWeek" /><ValidationMessage For="@(() => templateForm.DaysPerWeek)" /></label>
+            </div>
+            <label>Description<InputTextArea @bind-Value="templateForm.Description" /><ValidationMessage For="@(() => templateForm.Description)" /></label>
+            <button class="button primary full"><AppIcon Name="check" /> SAVE TEMPLATE</button>
+        </EditForm>
+    </div></div>
+}
+
+@code {
+    private StaffOverviewModel? overview;
+    private List<ExerciseModel> exercises = [];
+    private List<UserModel> users = [];
+    private List<PlanModel> templates = [];
+    private List<BackupModel> backups = [];
+    private readonly Dictionary<int, UserAccessForm> accessForms = [];
+    private ExerciseForm exerciseForm = new();
+    private WorkoutTemplateForm templateForm = new();
+    private int? editingExerciseId;
+    private int? editingTemplateId;
+    private bool showExerciseEditor;
+    private bool showTemplateEditor;
+    private bool loading = true;
+    private string? loadError;
+    private string? message;
+    private string kind = "success";
+    private bool IsAdmin => Session.Current?.User.Role == "Admin";
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        loading = true;
+        loadError = null;
+        try
+        {
+            overview = await Api.GetAsync<StaffOverviewModel>("api/staff/overview");
+            exercises = await Api.GetAsync<List<ExerciseModel>>("api/exercises");
+            if (IsAdmin)
+            {
+                users = await Api.GetAsync<List<UserModel>>("api/staff/users");
+                templates = await Api.GetAsync<List<PlanModel>>("api/staff/templates");
+                backups = await Api.GetAsync<List<BackupModel>>("api/staff/backups");
+                accessForms.Clear();
+                foreach (var user in users)
+                    accessForms[user.Id] = new UserAccessForm { Role = user.Role, SubscriptionStatus = user.SubscriptionStatus, IsActive = user.IsActive };
+            }
+        }
+        catch (ApiException ex) { overview = null; loadError = ex.Message; }
+        finally { loading = false; }
+    }
+
+    private void NewExercise() { editingExerciseId = null; exerciseForm = new(); showExerciseEditor = true; }
+    private void EditExercise(ExerciseModel x)
+    {
+        editingExerciseId = x.Id;
+        exerciseForm = new ExerciseForm { Name = x.Name, MuscleGroup = x.MuscleGroup, TargetMuscle = x.TargetMuscle, SecondaryMuscles = x.SecondaryMuscles, Equipment = x.Equipment, Difficulty = x.Difficulty, ShortDescription = x.ShortDescription, Instructions = x.Instructions, CommonMistakes = x.CommonMistakes, SafetyTips = x.SafetyTips, RecommendedSetsReps = x.RecommendedSetsReps, ScienceNote = x.ScienceNote, IsPublic = x.IsPublic };
+        showExerciseEditor = true;
+    }
+    private void CloseExerciseEditor() => showExerciseEditor = false;
+    private async Task SaveExercise()
+    {
+        try
+        {
+            if (editingExerciseId.HasValue) await Api.PutAsync<ExerciseModel>($"api/exercises/{editingExerciseId}", exerciseForm);
+            else await Api.PostAsync<ExerciseModel>("api/exercises", exerciseForm);
+            ShowSuccess("Movement record saved."); showExerciseEditor = false; await Load();
+        }
+        catch (ApiException ex) { ShowError(ex); }
+    }
+
+    private void NewTemplate() { editingTemplateId = null; templateForm = new(); showTemplateEditor = true; }
+    private void EditTemplate(PlanModel x)
+    {
+        editingTemplateId = x.Id;
+        templateForm = new WorkoutTemplateForm { Title = x.Title, Goal = x.Goal, Difficulty = x.Difficulty, DaysPerWeek = x.DaysPerWeek, Description = x.Description };
+        showTemplateEditor = true;
+    }
+    private void CloseTemplateEditor() => showTemplateEditor = false;
+    private async Task SaveTemplate()
+    {
+        try
+        {
+            if (editingTemplateId.HasValue) await Api.PutAsync<PlanModel>($"api/staff/templates/{editingTemplateId}", templateForm);
+            else await Api.PostAsync<PlanModel>("api/staff/templates", templateForm);
+            ShowSuccess("Workout template saved."); showTemplateEditor = false; await Load();
+        }
+        catch (ApiException ex) { ShowError(ex); }
+    }
+    private async Task DeleteTemplate(int id)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "Delete this reusable plan template and its linked workout history?")) return;
+        try { await Api.DeleteAsync($"api/staff/templates/{id}"); ShowSuccess("Workout template deleted."); await Load(); }
+        catch (ApiException ex) { ShowError(ex); }
+    }
+    private async Task CreateBackup()
+    {
+        try
+        {
+            var backup = await Api.PostAsync<BackupModel>("api/staff/backups");
+            ShowSuccess($"Protected backup created: {backup.FileName}");
+            await Load();
+        }
+        catch (ApiException ex) { ShowError(ex); }
+    }
+    private async Task SaveAccess(int id)
+    {
+        try { await Api.PutAsync($"api/staff/users/{id}", accessForms[id]); ShowSuccess("Account access updated."); await Load(); }
+        catch (ApiException ex) { ShowError(ex); }
+    }
+    private void ShowSuccess(string value) { message = value; kind = "success"; }
+    private void ShowError(ApiException ex) { message = ex.Message; kind = "error"; }
+    private static string Initials(string value, int count) => value[..Math.Min(count, value.Length)].ToUpperInvariant();
+    private bool CanEdit(ExerciseModel item) => IsAdmin || item.CreatedByUserId == Session.Current?.User.Id;
+    private static string Humanize(string value) => value switch { "BuildMuscle" => "Build muscle", "LoseFat" => "Lose fat", "ImproveStrength" => "Improve strength", "GeneralFitness" => "General fitness", _ => value };
+}

@@ -1,0 +1,57 @@
+@inherits LayoutComponentBase
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<AuthorizeView>
+    <Authorized>
+        <a class="skip-link" href="#main-content">Skip to content</a>
+        <div class="app-shell @(railCompact ? "rail-compact" : "")">
+            <aside class="rail">
+                <a class="brand" href="/dashboard"><span class="brand-glyph"><AppIcon Name="logo" /></span><span>GYM<span>TELLIGENCE</span></span></a>
+                <div class="rail-status"><i></i><span>System online</span><strong>LIVE</strong></div>
+                <nav class="main-nav" aria-label="Primary navigation">
+                    <NavLink href="dashboard" Match="NavLinkMatch.All" title="Dashboard"><AppIcon Name="dashboard" /><span>Dashboard</span><b>01</b></NavLink>
+                    <NavLink href="plans" title="Workout plans"><AppIcon Name="dumbbell" /><span>Workout plans</span><b>02</b></NavLink>
+                    <NavLink href="exercises" title="Exercise library"><AppIcon Name="book" /><span>Exercises</span><b>03</b></NavLink>
+                    <NavLink href="progress" title="Progress"><AppIcon Name="chart" /><span>Progress</span><b>04</b></NavLink>
+                    <NavLink href="coach" title="AI coach"><AppIcon Name="sparkles" /><span>AI coach</span><b>05</b></NavLink>
+                    <NavLink href="reminders" title="Reminders"><AppIcon Name="bell" /><span>Reminders</span><b>06</b></NavLink>
+                    @if (Session.Current?.User.Role is "Trainer" or "Admin")
+                    {
+                        <NavLink href="staff" title="Staff tools"><AppIcon Name="shield" /><span>Staff tools</span><b>07</b></NavLink>
+                    }
+                </nav>
+                <button class="rail-toggle" @onclick="ToggleRail" title="@(railCompact ? "Expand navigation" : "Compact navigation")" aria-label="@(railCompact ? "Expand navigation" : "Compact navigation")"><AppIcon Name="chevrons" /></button>
+                <div class="rail-profile">
+                    <a href="/profile"><span class="avatar">@Initials</span><span><strong>@Session.Current?.User.Name</strong><small>@Session.Current?.User.Role · @Session.Current?.User.Points pts</small></span></a>
+                    <button class="round-button" @onclick="Logout" title="Sign out" aria-label="Sign out"><AppIcon Name="logout" /></button>
+                </div>
+            </aside>
+            <section class="main-stage">
+                <header class="mobile-header"><a class="brand" href="/dashboard"><span class="brand-glyph"><AppIcon Name="logo" /></span><span>GYM<span>TELLIGENCE</span></span></a><a class="avatar" href="/profile">@Initials</a></header>
+                <main class="page-frame" id="main-content">@Body</main>
+            </section>
+            <nav class="dock" aria-label="Mobile navigation">
+                <NavLink href="dashboard"><AppIcon Name="home" /><small>Home</small></NavLink>
+                <NavLink href="plans"><AppIcon Name="dumbbell" /><small>Plans</small></NavLink>
+                <NavLink href="coach" class="dock-core"><AppIcon Name="sparkles" /><small>Coach</small></NavLink>
+                <NavLink href="progress"><AppIcon Name="chart" /><small>Progress</small></NavLink>
+                <NavLink href="profile"><AppIcon Name="user" /><small>You</small></NavLink>
+            </nav>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <a class="skip-link" href="#main-content">Skip to content</a>
+        <div class="public-shell">
+            <header class="public-nav"><a class="brand" href="/"><span class="brand-glyph"><AppIcon Name="logo" /></span><span>GYM<span>TELLIGENCE</span></span></a><nav><a href="#method">How it works</a><a href="#features">Features</a><a class="button ghost compact" href="/login"><AppIcon Name="user" /> Log in</a><a class="button primary compact" href="/register">Start training <AppIcon Name="arrow" /></a></nav></header>
+            <main id="main-content">@Body</main>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private bool railCompact;
+    private string Initials => string.Join("", (Session.Current?.User.Name ?? "GT").Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(x => x[0]));
+    private void ToggleRail() => railCompact = !railCompact;
+    private async Task Logout() { await Session.SignOutAsync(); Navigation.NavigateTo("/"); }
+}

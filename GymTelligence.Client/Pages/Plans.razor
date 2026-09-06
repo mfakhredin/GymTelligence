@@ -1,0 +1,42 @@
+@page "/plans"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject NavigationManager Navigation
+
+<PageTitle>Training — GymTelligence</PageTitle>
+<header class="page-head"><div><p class="eyebrow"><i></i> Workout programming</p><h1>Workout plans<span>.</span></h1><p>Choose a proven template or generate a personalized plan from your profile and recent progress.</p></div><button class="button primary xl" @onclick="Generate" disabled="@generating"><AppIcon Name="sparkles" /> @(generating ? "BUILDING YOUR PLAN…" : "GENERATE NEW PLAN")</button></header>
+<AlertMessage Message="@error" />
+<section class="generator-banner"><div><span>ADAPTIVE ENGINE</span><h2>Profile × history × feedback</h2><p>The generator adjusts days, volume, rep ranges, exercise selection, and recovery notes.</p></div><div class="engine-visual"><i></i><i></i><i></i><b>LIVE INPUT</b></div></section>
+@if (loading) { <PageState LoadingText="Indexing your training plans…" /> }
+else if (plans is null) { <PageState Error="@loadError" ErrorTitle="Your workout plans couldn't be loaded." OnRetry="Load" /> }
+else
+{
+    <div class="section-label"><span>@plans.Count AVAILABLE PLANS</span><i></i><strong>MOST RELEVANT FIRST</strong></div>
+    <section class="plan-grid">
+        @foreach (var (plan, index) in plans.Select((x, i) => (x, i)))
+        {
+            <a class="plan-tile @(plan.Source == "Generated" ? "generated" : "")" href="/plans/@plan.Id">
+                <div class="plan-index">@((index + 1).ToString("D2"))</div><div class="plan-tags"><span>@Pretty(plan.Goal)</span><span>@plan.Difficulty</span></div>
+                <div><small>@plan.Source.ToUpperInvariant() / V@plan.Version</small><h2>@plan.Title</h2><p>@plan.Description</p></div>
+                <div class="plan-footer"><strong>@plan.DaysPerWeek<small> days / week</small></strong><span>VIEW PLAN →</span></div>
+            </a>
+        }
+    </section>
+}
+
+@code {
+    private List<PlanModel>? plans;
+    private bool generating;
+    private bool loading = true;
+    private string? loadError;
+    private string? error;
+    protected override async Task OnInitializedAsync() => await Load();
+    private async Task Load(){loading=true;loadError=null;try{plans=await Api.GetAsync<List<PlanModel>>("api/workouts/plans");}catch(ApiException ex){plans=null;loadError=ex.Message;}finally{loading=false;}}
+    private async Task Generate()
+    {
+        generating = true; error = null;
+        try { var result = await Api.PostAsync<PlanDetailModel>("api/workouts/plans/generate"); Navigation.NavigateTo($"/plans/{result.Plan.Id}"); }
+        catch(ApiException ex){ error=ex.Message; generating=false; }
+    }
+    private static string Pretty(string value) => System.Text.RegularExpressions.Regex.Replace(value, "([a-z])([A-Z])", "$1 $2");
+}

@@ -1,0 +1,21 @@
+@page "/subscription"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject IJSRuntime JS
+
+<PageTitle>Subscription — GymTelligence</PageTitle>
+<header class="page-head"><div><p class="eyebrow"><i></i> Account and billing</p><h1>Your access<span>.</span></h1><p>Review what is included with your account and open secure checkout when premium access is configured.</p></div></header>
+<AlertMessage Message="@message" Kind="@kind" />
+@if(loading){<PageState LoadingText="Loading your access details…" />}
+else if(status is null){<PageState Error="@loadError" ErrorTitle="Your subscription details couldn't be loaded." OnRetry="Load" />}
+else
+{
+    <section class="pricing-stage"><article class="price-panel current"><span>CURRENT PLAN</span><h2>Core</h2><div class="price">$0<small>/ forever</small></div><ul><li>Adaptive workout plan generation</li><li>Set-by-set workout tracking</li><li>Progress history and trends</li><li>AI training coach</li><li>Reminders and achievement badges</li></ul><div class="current-tag">@status.Status.ToUpperInvariant()</div></article><article class="price-panel pro"><div class="pro-glow"></div><span>OPTIONAL UPGRADE</span><h2>Pro Signal</h2><div class="price">Configured in Stripe</div><ul><li>Ready for future premium features</li><li>Secure server-created checkout</li><li>Verified Stripe payment updates</li><li>Automatic account status updates</li></ul><button class="button light full" disabled="@(!status.CheckoutAvailable||busy)" @onclick="Checkout"><AppIcon Name="arrow" /> @(status.CheckoutAvailable?"OPEN SECURE CHECKOUT":"ADD STRIPE KEYS TO ENABLE")</button></article></section>
+}
+
+@code {
+    private SubscriptionModel? status;private bool busy;private bool loading=true;private string? loadError;private string? message;private string kind="success";
+    protected override async Task OnInitializedAsync()=>await Load();
+    private async Task Load(){loading=true;loadError=null;try{status=await Api.GetAsync<SubscriptionModel>("api/subscriptions/status");}catch(ApiException ex){status=null;loadError=ex.Message;}finally{loading=false;}}
+    private async Task Checkout(){busy=true;try{var result=await Api.PostAsync<CheckoutModel>("api/subscriptions/checkout");await JS.InvokeVoidAsync("gymSession.goTo",result.Url);}catch(ApiException ex){message=ex.Message;kind="error";busy=false;}}
+}

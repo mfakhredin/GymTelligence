@@ -1,0 +1,29 @@
+@page "/profile"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject SessionState Session
+
+<PageTitle>Profile — GymTelligence</PageTitle>
+<header class="page-head"><div><p class="eyebrow"><i></i> Personal and training details</p><h1>Your profile<span>.</span></h1><p>Keep these details current so generated workout plans match your body, goal, and experience level.</p></div><a class="button ghost" href="/subscription">SUBSCRIPTION <AppIcon Name="arrow" /></a></header>
+<AlertMessage Message="@message" Kind="@kind" />
+@if(loading){<PageState LoadingText="Loading your athlete profile…" />}
+else if(user is null){<PageState Error="@loadError" ErrorTitle="Your profile couldn't be loaded." OnRetry="Load" />}
+else
+{
+    <section class="profile-layout">
+        <aside class="identity-card"><span class="identity-avatar">@Initials</span><small>ATHLETE / @user.Id.ToString("D4")</small><h2>@user.Name</h2><p>@user.Email</p><div><span><small>ROLE</small><strong>@user.Role</strong></span><span><small>POINTS</small><strong>@user.Points</strong></span><span><small>MEMBER SINCE</small><strong>@user.CreatedAt.ToString("MMM yy")</strong></span></div><i></i></aside>
+        <div class="profile-panels">
+            <EditForm Model="profile" OnValidSubmit="SaveProfile" class="form-panel"><DataAnnotationsValidator/><div class="card-top"><span>01 / TRAINING PROFILE</span><strong>USED FOR PLAN GENERATION</strong></div><div class="field-pair"><label>Full name<InputText @bind-Value="profile.Name" /></label><label>Age<InputNumber @bind-Value="profile.Age" /></label></div><div class="field-pair"><label>Weight / kg<InputNumber @bind-Value="profile.Weight" /></label><label>Height / cm<InputNumber @bind-Value="profile.Height" /></label></div><div class="field-pair"><label>Training level<InputSelect @bind-Value="profile.FitnessLevel"><option>Beginner</option><option>Intermediate</option><option>Advanced</option></InputSelect></label><label>Primary goal<InputSelect @bind-Value="profile.Goal"><option value="GeneralFitness">General fitness</option><option value="BuildMuscle">Build muscle</option><option value="LoseFat">Lose fat</option><option value="ImproveStrength">Improve strength</option></InputSelect></label></div><button class="button primary"><AppIcon Name="check" /> SAVE PROFILE</button></EditForm>
+            <EditForm Model="password" OnValidSubmit="SavePassword" class="form-panel"><DataAnnotationsValidator/><div class="card-top"><span>02 / ACCOUNT SECURITY</span><strong>ENCRYPTED</strong></div><div class="field-pair"><label>Current password<InputText type="password" @bind-Value="password.CurrentPassword" /></label><label>New password<InputText type="password" @bind-Value="password.NewPassword" /></label></div><button class="button ghost"><AppIcon Name="shield" /> CHANGE PASSWORD</button></EditForm>
+        </div>
+    </section>
+}
+
+@code {
+    private UserModel? user; private ProfileForm profile=new(); private PasswordForm password=new(); private string? message; private string kind="success"; private bool loading=true; private string? loadError;
+    private string Initials=>string.Join("",(user?.Name??"GT").Split(' ',StringSplitOptions.RemoveEmptyEntries).Take(2).Select(x=>x[0]));
+    protected override async Task OnInitializedAsync()=>await Load();
+    private async Task Load(){loading=true;loadError=null;try{user=await Api.GetAsync<UserModel>("api/auth/me");profile=new ProfileForm{Name=user.Name,Age=user.Age??18,Weight=user.Weight??70,Height=user.Height??170,FitnessLevel=user.FitnessLevel,Goal=user.Goal};}catch(ApiException ex){user=null;loadError=ex.Message;}finally{loading=false;}}
+    private async Task SaveProfile(){try{user=await Api.PutAsync<UserModel>("api/auth/profile",profile);Session.UpdateUser(user);message="Baseline updated. Future generated blocks will use it.";kind="success";}catch(ApiException ex){message=ex.Message;kind="error";}}
+    private async Task SavePassword(){try{await Api.PutAsync("api/auth/password",password);password=new();message="Password changed securely.";kind="success";}catch(ApiException ex){message=ex.Message;kind="error";}}
+}

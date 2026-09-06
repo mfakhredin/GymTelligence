@@ -1,0 +1,61 @@
+@page "/"
+@attribute [AllowAnonymous]
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>GymTelligence — Train with signal</PageTitle>
+
+<section class="hero-orbit">
+    <div class="hero-grid"></div>
+    <div class="hero-noise"></div>
+    <div class="hero-copy">
+        <div class="eyebrow"><i></i> Adaptive training intelligence</div>
+        <h1>Your body sends<br><em>signals.</em> We listen.</h1>
+        <p>Personalized workout plans that respond to your progress, difficulty feedback, goals, and changing schedule.</p>
+        <div class="hero-actions">
+            <a class="button primary xl" href="@(Session.Current is null ? "/register" : "/dashboard")">Start training <AppIcon Name="arrow" /></a>
+            <a class="text-link" href="#method">See how it works <span>↓</span></a>
+        </div>
+        <div class="proof-line"><span>01</span><p>Evidence-aware programming</p><span>02</span><p>Feedback-responsive volume</p><span>03</span><p>Zero guesswork</p></div>
+    </div>
+    <div class="hero-visual" aria-hidden="true">
+        <div class="orbit-ring ring-one"></div><div class="orbit-ring ring-two"></div>
+        <div class="core"><span>READY</span><strong>84</strong><small>training index</small></div>
+        <div class="float-card fc-one"><small>NEXT SIGNAL</small><strong>Full Body / C</strong><span>42 min · 12 sets</span></div>
+        <div class="float-card fc-two"><small>RECOVERY</small><strong>Optimal</strong><div class="meter"><i></i></div></div>
+        <span class="coordinate c1">31.9539° N</span><span class="coordinate c2">35.9106° E</span>
+    </div>
+</section>
+
+<section class="method-section" id="method">
+    <div class="section-index">01 / METHOD</div>
+    <div><p class="eyebrow">A plan with a pulse</p><h2>It remembers the hard days.<br>And builds around them.</h2></div>
+    <div class="method-flow">
+        <article><span>INPUT</span><strong>Profile + metrics</strong><p>Your level, goal, body data, and schedule form the baseline.</p></article>
+        <i>→</i><article class="active"><span>ENGINE</span><strong>Adaptive logic</strong><p>Difficulty feedback and trends tune frequency, volume, and exercise choice.</p></article>
+        <i>→</i><article><span>OUTPUT</span><strong>Your next block</strong><p>A practical plan that evolves as consistently as you do.</p></article>
+    </div>
+</section>
+
+<section class="feature-section" id="features">
+    <div class="section-index">02 / SYSTEM</div>
+    <div class="feature-intro"><p class="eyebrow">One training operating system</p><h2>Everything connected.<br>Nothing decorative.</h2></div>
+    <div class="bento">
+        <article class="bento-wide"><span class="card-number">01</span><div><h3>Adaptive programming</h3><p>Generate structured blocks from profile, progress, and recent difficulty signals.</p></div><div class="mini-chart"><i style="height:32%"></i><i style="height:48%"></i><i style="height:41%"></i><i style="height:67%"></i><i style="height:82%"></i><i style="height:76%"></i></div></article>
+        <article><span class="card-number">02</span><h3>Set-level focus</h3><p>Track the work where it actually happens.</p><div class="set-demo"><i></i><i class="done"></i><i class="done"></i><i></i></div></article>
+        <article class="red-card"><span class="card-number">03</span><h3>Coach, on signal.</h3><p>Ask better questions. Get safer, context-aware answers.</p><strong>✦</strong></article>
+        <article><span class="card-number">04</span><h3>Visible momentum</h3><p>Progress, consistency, points, and badges in one clean telemetry layer.</p><div class="big-stat">+12.4<small>% consistency</small></div></article>
+    </div>
+</section>
+
+<section class="final-cta"><span>TRAIN WITH A PLAN THAT ADAPTS</span><h2>Train with signal.</h2><a class="button light xl" href="/register">Build your first plan <AppIcon Name="arrow" /></a></section>
+<footer class="public-footer"><a class="brand" href="/"><span class="brand-glyph"><AppIcon Name="logo" /></span><span>GYM<span>TELLIGENCE</span></span></a><p>Built for deliberate progress.</p><small>© @DateTime.Now.Year</small></footer>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.EnsureInitializedAsync();
+        if (Session.Current is not null)
+            Navigation.NavigateTo("/dashboard", replace: true);
+    }
+}

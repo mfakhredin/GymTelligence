@@ -1,0 +1,100 @@
+@page "/dashboard"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject SessionState Session
+
+<PageTitle>Command — GymTelligence</PageTitle>
+
+@if (loading)
+{
+    <PageState LoadingText="Reading your training signal…" />
+}
+else if (data is null)
+{
+    <PageState Error="@loadError" ErrorTitle="Your dashboard couldn't be loaded." OnRetry="Load" />
+}
+else
+{
+    <header class="page-head command-head">
+        <div><p class="eyebrow"><i></i> Dashboard / @DateTime.Now.ToString("ddd dd MMM")</p><h1>Welcome back, @FirstName<span>.</span></h1><p>@data.Motivation</p></div>
+        <div class="readiness"><div class="score-ring" style="--score:@Readiness%"><strong>@Readiness</strong><small>readiness</small></div><span><i></i> Training window open</span></div>
+    </header>
+    <AlertMessage Message="@message" Kind="@messageKind" />
+    <section class="metric-strip">
+        <article><small>WORKOUTS THIS WEEK</small><strong>@data.WeeklyWorkouts<em>/ @WeeklyTarget</em></strong><span>sessions completed</span></article>
+        <article><small>PRIMARY GOAL</small><strong class="word-stat">@Pretty(data.User.Goal)</strong><span>@data.User.FitnessLevel training level</span></article>
+        <article><small>POINTS EARNED</small><strong>@data.User.Points</strong><span>from completed activity</span></article>
+        <article><small>LATEST WEIGHT</small><strong>@(data.User.Weight?.ToString("0.0") ?? "—")<em> kg</em></strong><span>most recent entry</span></article>
+    </section>
+
+    <section class="command-grid">
+        <article class="focus-card">
+            <div class="card-top"><span>01 / TODAY'S WORKOUT</span><span class="live-tag"><i></i> READY</span></div>
+            @if (data.TodayWorkout is not null)
+            {
+                <div class="focus-main"><div><p>@(data.ActivePlan?.Title)</p><h2>@data.TodayWorkout.Title</h2><span>@data.TodayWorkout.TotalSets sets · Adaptive @data.User.FitnessLevel.ToLowerInvariant() load</span></div><div class="completion-orb"><strong>@SetPercent%</strong><small>sets</small></div></div>
+                <div class="progress-track"><i style="width:@SetPercent%"></i></div>
+                <div class="focus-actions"><a class="button primary" href="/plans/@data.ActivePlan?.Id"><AppIcon Name="dumbbell" /> Open workout</a><button class="button ghost" @onclick="CompleteWorkout"><AppIcon Name="check" /> Mark complete</button></div>
+            }
+            else
+            {
+                <div class="focus-main"><div><p>NO ACTIVE WORKOUT</p><h2>Generate your first adaptive plan.</h2></div></div><a class="button primary" href="/plans"><AppIcon Name="plus" /> Build a plan</a>
+            }
+        </article>
+
+        <article class="signal-card">
+            <div class="card-top"><span>02 / WEIGHT PROGRESS</span><a href="/progress">VIEW DETAILS</a></div>
+            <div class="chart-area">
+                @if (data.Progress.Count > 0)
+                {
+                    @foreach (var (point, index) in data.Progress.Select((x, i) => (x, i)))
+                    {
+                        <div class="chart-column"><i style="height:@BarHeight(point.Weight)%"><b></b></i><small>@point.Date.ToString("dd")</small></div>
+                    }
+                }
+                else { <p class="muted">Add progress data to activate telemetry.</p> }
+            </div>
+            <div class="chart-legend"><span><i></i> BODY WEIGHT</span><span>Last @data.Progress.Count entries</span></div>
+        </article>
+
+        <article class="habit-card"><div class="card-top"><span>03 / TODAY'S HABIT</span><AppIcon Name="target" /></div><blockquote>“@data.Habit”</blockquote><a href="/reminders">Add a reminder →</a></article>
+        <article class="reminder-card"><div class="card-top"><span>04 / UPCOMING REMINDERS</span><a href="/reminders">MANAGE</a></div>@if (data.Reminders.Count == 0){<p class="muted">You have no active reminders.</p>}@foreach(var reminder in data.Reminders){<div class="reminder-row"><strong>@reminder.ReminderTime.ToString("HH:mm")</strong><span>@reminder.Title<small>@reminder.DaysOfWeek</small></span><i class="@(reminder.IsActive ? "on" : "")"></i></div>}</article>
+        <article class="badge-card"><div class="card-top"><span>05 / BADGES EARNED</span><a href="/progress">VIEW ALL</a></div><div class="badge-cluster">@if(data.Badges.Count==0){<p class="muted">Complete a workout to begin earning badges.</p>}@foreach(var badge in data.Badges.Take(4)){<div title="@badge.Description"><span>✦</span><strong>@badge.Name</strong></div>}</div></article>
+        <a class="coach-launch" href="/coach"><span>AI COACH / ONLINE</span><strong>Ask your<br>training coach.</strong><AppIcon Name="sparkles" /><small>Open coach →</small></a>
+    </section>
+}
+
+@code {
+    private DashboardModel? data;
+    private bool loading = true;
+    private string? loadError;
+    private string? message;
+    private string messageKind = "success";
+    private string FirstName => data?.User.Name.Split(' ')[0] ?? "Athlete";
+    private int WeeklyTarget => data?.ActivePlan?.DaysPerWeek ?? 3;
+    private int Readiness => Math.Clamp(72 + (data?.WeeklyWorkouts ?? 0) * 4, 72, 96);
+    private int SetPercent => data?.TodayWorkout is { TotalSets: > 0 } workout ? workout.CompletedSets * 100 / workout.TotalSets : 0;
+    protected override async Task OnInitializedAsync() => await Load();
+    private async Task Load()
+    {
+        loading = true; loadError = null;
+        try { data = await Api.GetAsync<DashboardModel>("api/dashboard"); Session.UpdateUser(data.User); }
+        catch (ApiException ex) { data = null; loadError = ex.Message; }
+        finally { loading = false; }
+    }
+    private async Task CompleteWorkout()
+    {
+        if (data?.TodayWorkout is null) return;
+        try { await Api.PostAsync($"api/workouts/{data.TodayWorkout.Id}/complete", new { durationMinutes = 0, difficulty = "Normal", note = "Quick completion from command center." }); message = "Workout logged. Signal points added."; messageKind = "success"; data = await Api.GetAsync<DashboardModel>("api/dashboard"); }
+        catch (ApiException ex) { message = ex.Message; messageKind = "error"; }
+    }
+    private int BarHeight(decimal? value)
+    {
+        if (data?.Progress.Count == 0 || value is null) return 12;
+        var values = data!.Progress.Where(x => x.Weight.HasValue).Select(x => x.Weight!.Value).ToList();
+        if (values.Count == 0) return 12;
+        var min = values.Min() - 1; var max = values.Max() + 1;
+        return (int)(24 + (value.Value - min) / Math.Max(1, max - min) * 62);
+    }
+    private static string Pretty(string value) => System.Text.RegularExpressions.Regex.Replace(value, "([a-z])([A-Z])", "$1 $2");
+}

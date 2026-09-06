@@ -1,0 +1,47 @@
+@page "/register"
+@attribute [AllowAnonymous]
+@inject ApiClient Api
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>Create account — GymTelligence</PageTitle>
+<section class="auth-page register-page">
+    <div class="auth-art">
+        <div class="auth-grid"></div><span class="vertical-word">PROFILE / ADAPT / EVOLVE</span>
+        <div class="auth-art-copy"><span>00</span><h1>Build your<br>baseline.</h1><p>Give the engine enough signal to make the first training block feel like yours.</p></div>
+        <div class="body-scan"><i></i><i></i><i></i><b>INITIALIZING</b></div>
+    </div>
+    <div class="auth-form-wrap wide-form">
+        <div class="auth-heading"><p class="eyebrow"><i></i> Create your account</p><h2>Build your baseline.</h2><p>These details help create workout plans suited to you. You can update them later.</p></div>
+        <AlertMessage Message="@error" />
+        <EditForm Model="form" OnValidSubmit="Submit" class="form-stack compact-form">
+            <DataAnnotationsValidator />
+            <label>Full name<InputText @bind-Value="form.Name" autocomplete="name" /><ValidationMessage For="@(() => form.Name)" /></label>
+            <label>Email<InputText @bind-Value="form.Email" type="email" autocomplete="email" /><ValidationMessage For="@(() => form.Email)" /></label>
+            <div class="field-pair"><label>Password<InputText @bind-Value="form.Password" type="password" /><ValidationMessage For="@(() => form.Password)" /></label><label>Confirm<InputText @bind-Value="form.ConfirmPassword" type="password" /><ValidationMessage For="@(() => form.ConfirmPassword)" /></label></div>
+            <div class="field-trio"><label>Age<InputNumber @bind-Value="form.Age" /></label><label>Weight / kg<InputNumber @bind-Value="form.Weight" /></label><label>Height / cm<InputNumber @bind-Value="form.Height" /></label></div>
+            <div class="field-pair"><label>Training level<InputSelect @bind-Value="form.FitnessLevel"><option>Beginner</option><option>Intermediate</option><option>Advanced</option></InputSelect></label><label>Primary goal<InputSelect @bind-Value="form.Goal"><option value="GeneralFitness">General fitness</option><option value="BuildMuscle">Build muscle</option><option value="LoseFat">Lose fat</option><option value="ImproveStrength">Improve strength</option></InputSelect></label></div>
+            <button class="button primary xl full" disabled="@busy"><AppIcon Name="arrow" /> @(busy ? "Creating your account…" : "CREATE ACCOUNT")</button>
+        </EditForm>
+        <p class="auth-switch">Already have an account? <a href="/login">Log in</a></p>
+    </div>
+</section>
+
+@code {
+    private readonly RegisterForm form = new();
+    private string? error;
+    private bool busy;
+    private async Task Submit()
+    {
+        busy = true; error = null;
+        try
+        {
+            var payload = new { form.Name, form.Email, form.Password, form.Age, form.Weight, form.Height, form.FitnessLevel, form.Goal };
+            var result = await Api.PostAsync<AuthResponse>("api/auth/register", payload);
+            await Session.SignInAsync(result);
+            Navigation.NavigateTo("/dashboard");
+        }
+        catch (ApiException ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+}

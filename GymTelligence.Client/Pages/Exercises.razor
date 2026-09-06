@@ -1,0 +1,32 @@
+@page "/exercises"
+@attribute [Authorize]
+@inject ApiClient Api
+
+<PageTitle>Movement library — GymTelligence</PageTitle>
+<header class="page-head"><div><p class="eyebrow"><i></i> Exercise reference</p><h1>Exercise library<span>.</span></h1><p>Find clear technique guidance, common mistakes, safety advice, and the purpose behind every movement.</p></div><div class="library-count"><strong>@(filtered?.Count ?? 0)</strong><span>exercises found</span></div></header>
+<section class="filter-console"><label><AppIcon Name="book" /><input @bind="search" @bind:event="oninput" placeholder="Search exercises or training purpose" /></label><select @bind="muscle"><option value="">All muscle groups</option>@foreach(var value in Muscles){<option>@value</option>}</select><select @bind="level"><option value="">All experience levels</option><option>Beginner</option><option>Intermediate</option><option>Advanced</option></select></section>
+@if (loading) { <PageState LoadingText="Loading the exercise library…" /> }
+else if (items is null) { <PageState Error="@error" ErrorTitle="The exercise library couldn't be loaded." OnRetry="Load" /> }
+else
+{
+    <section class="exercise-layout">
+        <div class="movement-list">
+            @foreach (var (item,index) in filtered!.Select((x,i)=>(x,i)))
+            {
+                <button class="movement-tile @(selected?.Id==item.Id ? "selected" : "")" @onclick="()=>selected=item"><span class="movement-code">@((index+1).ToString("D2"))</span><div><small>@item.MuscleGroup / @item.Equipment</small><h2>@item.Name</h2><p>@item.ShortDescription</p></div><AppIcon Name="arrow" /></button>
+            }
+        </div>
+        @if(selected is not null)
+        {
+            <aside class="movement-detail"><div class="detail-visual"><span>@selected.MuscleGroup.ToUpperInvariant()</span><strong>@selected.Name[..1]</strong><i></i></div><div class="detail-content"><div class="detail-labels"><span>@selected.Difficulty</span><span>@selected.Equipment</span><span>@selected.RecommendedSetsReps</span></div><h2>@selected.Name</h2><p>@selected.ShortDescription</p><section><small>TARGET</small><strong>@selected.TargetMuscle</strong><p>@selected.SecondaryMuscles</p></section><section><small>EXECUTION</small><p>@selected.Instructions</p></section><section class="warning-section"><small>AVOID</small><p>@selected.CommonMistakes</p></section><section><small>SAFETY SIGNAL</small><p>@selected.SafetyTips</p></section><blockquote><span>SCIENCE NOTE</span>@selected.ScienceNote</blockquote></div></aside>
+        }
+    </section>
+}
+
+@code {
+    private List<ExerciseModel>? items; private ExerciseModel? selected; private string search=""; private string muscle=""; private string level=""; private string? error; private bool loading=true;
+    private IEnumerable<string> Muscles => items is null ? Enumerable.Empty<string>() : items.Select(x=>x.MuscleGroup).Distinct().Order();
+    private List<ExerciseModel>? filtered => items?.Where(x=>(string.IsNullOrWhiteSpace(search)||x.Name.Contains(search,StringComparison.OrdinalIgnoreCase)||x.ShortDescription.Contains(search,StringComparison.OrdinalIgnoreCase))&&(string.IsNullOrWhiteSpace(muscle)||x.MuscleGroup==muscle)&&(string.IsNullOrWhiteSpace(level)||x.Difficulty==level)).ToList();
+    protected override async Task OnInitializedAsync()=>await Load();
+    private async Task Load(){loading=true;error=null;try{items=await Api.GetAsync<List<ExerciseModel>>("api/exercises");selected=items.FirstOrDefault();}catch(ApiException ex){items=null;error=ex.Message;}finally{loading=false;}}
+}

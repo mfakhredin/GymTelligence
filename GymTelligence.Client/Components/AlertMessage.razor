@@ -1,0 +1,8 @@
+@if (!string.IsNullOrWhiteSpace(Message))
+{
+    <div class="alert @Kind" role="@(Kind == "success" ? "status" : "alert")" aria-live="polite"><span>@(Kind == "success" ? "✓" : "!")</span><p>@Message</p></div>
+}
+@code {
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public string Kind { get; set; } = "error";
+}
