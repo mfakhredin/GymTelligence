@@ -28,10 +28,11 @@ GymTelligence.Tests/    Core service tests
 
 Requirements: Visual Studio 2022 with the ASP.NET workload, .NET 9 SDK, and SQL Server LocalDB.
 
-1. Open `GymTelligence.sln`.
-2. Set the `GymTelligence` web project as the startup project.
-3. Select its `https` profile and run it. If this is your first local ASP.NET project, trust the development certificate when Visual Studio asks.
-4. Open `https://localhost:7247` if the browser does not open automatically.
+1. Copy `GymTelligence/appsettings.Development.example.json` to `GymTelligence/appsettings.Development.json` and replace its JWT signing key with a private random value of at least 32 bytes.
+2. Open `GymTelligence.sln`.
+3. Set the `GymTelligence` web project as the startup project.
+4. Select its `https` profile and run it. If this is your first local ASP.NET project, trust the development certificate when Visual Studio asks.
+5. Open `https://localhost:7247` if the browser does not open automatically.
 
 The host applies the checked-in migration and seeds the exercise catalog, plan templates, badges, and scientific references at startup. Fixed demo accounts and sample progress data are created only in the Development environment.
 
@@ -47,7 +48,7 @@ Swagger is available at `https://localhost:7247/swagger` in Development. The hea
 
 ## Private configuration
 
-Do not commit live keys. The checked-in development configuration contains only a local database connection and a clearly marked development signing key. Use .NET user secrets locally or environment variables in deployment. Example values and field names are in `GymTelligence/appsettings.Local.example.json`.
+Do not commit live keys. `appsettings.Development.json` and `appsettings.Local.json` are ignored. Start from `GymTelligence/appsettings.Development.example.json` for the required local database and JWT settings; all optional field names are documented in `GymTelligence/appsettings.Local.example.json`. Prefer .NET user secrets locally or environment variables in deployment.
 
 ```powershell
 dotnet user-secrets set "Jwt:Key" "a-long-random-secret-of-at-least-32-bytes" --project GymTelligence
